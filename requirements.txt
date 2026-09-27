@@ -1,6 +1,6 @@
 langgraph==0.6.6
 langchain-openai==0.3.27
-langchain-ibm>=0.3.11  # Updated to support Python 3.13+
+langchain-ibm>=0.3.11,<1.0.0
 pydantic>=2.9.2,<3.0.0
 python-dotenv==1.1.0
 langchain-groq
