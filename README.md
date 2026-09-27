@@ -7,6 +7,8 @@ override that plan before it executes, then synthesizes the raw findings
 into a structured Markdown report — which a second AI evaluator critiques
 and can send back for revision before approving.
 
+🔗 Live demo:https://code-review-pipeline-5h9epfotc-triff1.vercel.app (access code required — DM me for one)
+
 ## What makes this interesting
 
 - **Dynamic multi-agent fan-out** — LangGraph's `Send` API dispatches
