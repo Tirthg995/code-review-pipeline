@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Code Review Pipeline</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+    :root {
+      --bg: #0a0a0a;
+      --panel: #141414;
+      --border: #2a2a2a;
+      --text: #f0f0f0;
+      --muted: #8a8a8a;
+      --accent: #ffffff;
+      --accent-text: #0a0a0a;
+      --code-bg: #1f1f1f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: 48px 20px;
+    }
+    .wrap { width: 100%; max-width: 640px; }
+    header { margin-bottom: 32px; }
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      margin: 0 0 6px 0;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+    .subtitle { color: var(--muted); font-size: 14px; }
+  
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .panel.active { display: block; }
+  
+    label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--muted); }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 18px;
+      background: #0f0f0f;
+      color: var(--text);
+    }
+    input[type="text"]:focus, input[type="password"]:focus {
+      outline: none;
+      border-color: #555;
+    }
+    .checkbox-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px; }
+    .checkbox-row input { margin-top: 3px; accent-color: #ffffff; }
+    .checkbox-row .label-text { font-size: 14px; color: var(--text); }
+    .checkbox-row .reason { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  
+    button {
+      background: var(--accent);
+      color: var(--accent-text);
+      border: none;
+      border-radius: 8px;
+      padding: 11px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s ease;
+    }
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.3; cursor: not-allowed; }
+    button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); margin-left: 8px; }
+  
+    .worker-item {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      background: #101010;
+    }
+    .worker-item input[type="checkbox"] { accent-color: #ffffff; }
+  
+    .status { font-size: 13px; color: var(--muted); margin-top: 14px; }
+    .status.error { color: #ff6b6b; }
+  
+    .report {
+      font-size: 14px;
+      line-height: 1.6;
+      max-height: 480px;
+      overflow-y: auto;
+      padding-right: 4px;
+      color: var(--text);
+    }
+    .report h1, .report h2, .report h3 { font-size: 16px; margin: 18px 0 8px 0; color: var(--text); }
+    .report ul, .report ol { padding-left: 20px; }
+    .report code {
+      background: var(--code-bg);
+      color: #e0e0e0;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .report::-webkit-scrollbar { width: 8px; }
+    .report::-webkit-scrollbar-track { background: transparent; }
+    .report::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+  
+    .dot-pulse { display: inline-flex; gap: 3px; margin-left: 6px; }
+    .dot-pulse span {
+      width: 4px; height: 4px; border-radius: 50%; background: var(--muted);
+      animation: pulse 1.2s infinite ease-in-out;
+    }
+    .dot-pulse span:nth-child(2) { animation-delay: 0.2s; }
+    .dot-pulse span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes pulse { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Code Review Pipeline</h1>
+    <div class="subtitle">Agentic static analysis with human-in-the-loop approval</div>
+  </header>
+
+  <!-- Screen 1: start form -->
+  <section id="panel-form" class="panel active">
+    <label for="repo-path">GitHub Repository URL</label>
+    <input type="text" id="repo-path" placeholder="https://github.com/owner/repo" />
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="force-all" />
+      <div>
+        <div class="label-text">Run all tools automatically</div>
+        <div class="reason">Skips the AI's own plan and just runs pylint, bandit, and radon directly.</div>
+      </div>
+    </div>
+
+    <label for="access-code">Access code</label>
+    <input type="password" id="access-code" placeholder="Enter access code" />
+
+    <button id="start-btn">Analyze Repository</button>
+    <div id="form-status" class="status"></div>
+  </section>
+
+  <!-- Screen 2: proposed plan -->
+  <section id="panel-plan" class="panel">
+    <label>Proposed plan</label>
+    <div id="worker-list"></div>
+    <button id="resume-btn">Run Selected Tools</button>
+    <div id="plan-status" class="status"></div>
+  </section>
+
+  <!-- Screen 3: final report -->
+  <section id="panel-report" class="panel">
+    <label>Report</label>
+    <div id="report-content" class="report"></div>
+    <div style="margin-top: 18px;">
+      <button class="secondary" id="new-review-btn">New Review</button>
+    </div>
+  </section>
+</div>
+
+<script>
+  // Change this to your deployed Render backend URL before publishing.
+  const API_BASE = "http://127.0.0.1:8000";
+
+  let currentReviewId = null;
+  let currentAccessCode = null;
+
+  const panels = {
+    form: document.getElementById("panel-form"),
+    plan: document.getElementById("panel-plan"),
+    report: document.getElementById("panel-report"),
+  };
+
+  function showPanel(name) {
+    Object.values(panels).forEach(p => p.classList.remove("active"));
+    panels[name].classList.add("active");
+  }
+
+  function loadingDots() {
+    return '<span class="dot-pulse"><span></span><span></span><span></span></span>';
+  }
+
+  async function readErrorDetail(response) {
+    try {
+      const data = await response.json();
+      return data.detail || `Request failed (${response.status})`;
+    } catch {
+      return `Request failed (${response.status})`;
+    }
+  }
+
+  document.getElementById("start-btn").addEventListener("click", async () => {
+    const repoUrl = document.getElementById("repo-path").value.trim();
+    const forceAll = document.getElementById("force-all").checked;
+    const accessCode = document.getElementById("access-code").value.trim();
+    const statusEl = document.getElementById("form-status");
+    const btn = document.getElementById("start-btn");
+
+    if (!repoUrl) {
+        statusEl.className = "status error"
+        statusEl.textContent = "Enter a GitHub repository URL.";
+        return;
+    }
+
+    btn.disabled = true;
+    statusEl.className = "status";
+    statusEl.innerHTML = "Analyzing repository" + loadingDots();
+
+    try {
+      const res = await fetch(`${API_BASE}/reviews`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Access-Code": accessCode,
+        },
+        body: JSON.stringify({ repo_url: repoUrl, force_all: forceAll }),
+      });
+
+      if (!res.ok) throw new Error(await readErrorDetail(res));
+
+      const data = await res.json();
+      currentReviewId = data.review_id;
+      currentAccessCode = accessCode;
+      renderPlan(data.proposed_decisions);
+      statusEl.textContent = "";
+      showPanel("plan");
+    } catch (err) {
+      statusEl.className = "status error";
+      statusEl.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  function renderPlan(decisions) {
+    const list = document.getElementById("worker-list");
+    list.innerHTML = "";
+    decisions.forEach(d => {
+      const item = document.createElement("div");
+      item.className = "worker-item";
+      item.innerHTML = `
+        <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;">
+          <input type="checkbox" data-worker="${d.worker_name}" ${d.should_run ? "checked" : ""} style="margin-top:3px;" />
+          <span>
+            <div class="label-text" style="text-transform:capitalize;">${d.worker_name}</div>
+            <div class="reason">${d.reason}</div>
+          </span>
+        </label>
+      `;
+      list.appendChild(item);
+    });
+  }
+
+  document.getElementById("resume-btn").addEventListener("click", async () => {
+    const checkboxes = document.querySelectorAll("#worker-list input[type=checkbox]");
+    const selectedTools = Array.from(checkboxes)
+      .filter(cb => cb.checked)
+      .map(cb => cb.dataset.worker);
+
+    const statusEl = document.getElementById("plan-status");
+    const btn = document.getElementById("resume-btn");
+
+    btn.disabled = true;
+    statusEl.className = "status";
+    statusEl.innerHTML = "Running analysis — this can take up to a minute" + loadingDots();
+
+    try {
+      const res = await fetch(`${API_BASE}/reviews/${currentReviewId}/resume`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Access-Code": currentAccessCode,
+        },
+        body: JSON.stringify({ selected_tools: selectedTools }),
+      });
+
+      if (!res.ok) throw new Error(await readErrorDetail(res));
+
+      const data = await res.json();
+      document.getElementById("report-content").innerHTML = marked.parse(data.final_report);
+      statusEl.textContent = "";
+      showPanel("report");
+    } catch (err) {
+      statusEl.className = "status error";
+      statusEl.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("new-review-btn").addEventListener("click", () => {
+    currentReviewId = null;
+    currentAccessCode = null;
+    document.getElementById("access-code").value = "";
+    document.getElementById("form-status").textContent = "";
+    document.getElementById("plan-status").textContent = "";
+    showPanel("form");
+  });
+</script>
+</body>
+</html>
